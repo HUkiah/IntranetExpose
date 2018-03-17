@@ -1,7 +1,7 @@
-package MediatorService
+package Mediator
 
 import (
-	"fmt"
+
 	"net"
 	"runtime"
 	"time"
@@ -9,37 +9,26 @@ import (
 
 type Mediator struct {
 	Mconn    net.Conn
-	Port     int
 	Error    chan bool
-	ErrorMsg string
+	heart 	 chan bool
 	writ     chan bool
 	recv     chan []byte
 	send     chan []byte
 }
 
-func (self *Mediator) Error() string {
-	strFormat := `
-  Connect Exception,Related ErrorMsg:
-  IPAddress:%s
-  Port:%s
-  ErrorMsg:%s
-  `
-	return fmt.Sprintf(strFormat, self.Mconn.LocalAddr().String(), self.Port, self.Error)
-
-}
-
-//because mediator attribute,so Read data is not processed. write same
-func (self *Mediator) Read() error {
+//because mediator attribute ,so Read data is not processed. write same
+func (self *Mediator) Read() {
 
 TOP:
 	index := 0
 	try := 0
+	self.Mconn.SetReadDeadline(time.Now().Add(time.Minute * 3))
 
 	var data []byte = make([]byte, 2048)
 
 	for index < len(data) {
 
-		n, err := conn.Read(data[index:])
+		n, err := self.Mconn.Read(data[index:])
 
 		if err != nil {
 			e, ok := err.(net.Error)
@@ -52,7 +41,7 @@ TOP:
 		//收到心跳包
 		if data[0] == 'h' && data[1] == 'h' {
 
-			self.conn.Write([]byte("hh"))
+			self.Mconn.Write([]byte("hh"))
 			goto TOP
 		}
 
@@ -76,7 +65,7 @@ TOP:
 	case data = <-self.send:
 
 		for index < len(data) {
-			n, err := conn.Write(data[index:])
+			n, err := self.Mconn.Write(data[index:])
 			if err != nil {
 
 				e, ok := err.(net.Error)
@@ -128,7 +117,7 @@ func handleConnection(conn net.Conn, timeout int) {
 		n, err := conn.Read(buffer)
 
 		if err != nil {
-			logErr(conn.RemoteAddr().String(), "Connection Error:", err)
+			//logErr(conn.RemoteAddr().String(), "Connection Error:", err)
 			return
 		}
 
@@ -154,7 +143,7 @@ func HeartBeating(conn net.Conn, msg chan byte, timeout int) {
 	select {
 	case <-msg:
 		//记录日志
-		conn.SetDeadline(time.Duration(timeout) * time.Second)
+		conn.SetDeadline(time.Now().Add(time.Duration(timeout) * time.Second))
 		break
 	case <-time.After(time.Second * 5):
 		//记录日志
@@ -165,7 +154,7 @@ func HeartBeating(conn net.Conn, msg chan byte, timeout int) {
 //数据监控
 func GravelChannel(n []byte, msg chan byte) {
 	for _, v := range n {
-		msg <- n
+		msg <- v
 	}
 	close(msg)
 }

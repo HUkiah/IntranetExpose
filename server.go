@@ -129,6 +129,7 @@ func main() {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
+
 	servicePort, _ := strconv.Atoi(*serviceport)
 	mediatorPort, _ := strconv.Atoi(*mediatorport)
 	if !(servicePort >= 0 && servicePort < 65536) {
@@ -156,36 +157,6 @@ func main() {
 		<-next
 	}
 
-}
-
-//显示错误
-func log(err error) {
-	if err != nil {
-		fmt.Printf("出现错误： %v\n", err)
-	}
-}
-
-//显示错误并退出
-func logExit(err error) {
-	if err != nil {
-		fmt.Printf("出现错误，退出线程： %v\n", err)
-		runtime.Goexit()
-	}
-}
-
-//显示错误并关闭链接，退出线程
-func logClose(err error, conn net.Conn) {
-	if err != nil {
-		//fmt.Println("对方已关闭", err)
-		runtime.Goexit()
-	}
-}
-
-//链接端口
-func dail(hostport string) net.Conn {
-	conn, err := net.Dial("tcp", hostport)
-	logExit(err)
-	return conn
 }
 
 //两个socket衔接相关处理
@@ -233,4 +204,34 @@ func handle(mediator *mediator, next chan bool) {
 			runtime.Goexit()
 		}
 	}
+}
+
+//显示错误
+func log(err error) {
+	if err != nil {
+		fmt.Printf("出现错误： %v\n", err)
+	}
+}
+
+//显示错误并退出
+func logExit(err error) {
+	if err != nil {
+		fmt.Printf("出现错误，退出线程： %v\n", err)
+		runtime.Goexit()
+	}
+}
+
+//显示错误并关闭链接，退出线程
+func logClose(err error, conn net.Conn) {
+	if err != nil {
+		//fmt.Println("对方已关闭", err)
+		runtime.Goexit()
+	}
+}
+
+//链接端口
+func dail(hostport string) net.Conn {
+	conn, err := net.Dial("tcp", hostport)
+	logExit(err)
+	return conn
 }
