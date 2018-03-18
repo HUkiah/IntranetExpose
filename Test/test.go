@@ -1,90 +1,87 @@
 package main
 
 import (
-  "fmt"
-  "time"
+	"fmt"
+	"time"
 )
 
+func main() {
 
+	fmt.Println("Main...")
 
-func main(){
+	Limiter := make(chan time.Time, 0)
 
-  fmt.Println("Main...")
+	request := make(chan int, 0)
+	response := make(chan int, 0)
 
-  Limiter := make(chan time.Time, 0)
+	//1号
+	go func() {
+		fmt.Println("1号...")
 
-  request := make(chan int, 0)
-  response :=make(chan int, 0)
+		defer func() {
+			fmt.Println("1号 exit...")
+		}()
 
-  //1号
-  go func ()  {
-    fmt.Println("1号...")
+		for t := range time.Tick(time.Second * 2) {
+			Limiter <- t
+		}
 
-    defer func ()  {
-      fmt.Println("1号 exit...")
-    }()
+	}()
 
-    for t := range time.Tick(time.Second*2) {
-      Limiter<-t
-    }
+	//2号
+	go func() {
 
-  }()
+		fmt.Println("2号...")
 
+		defer func() {
+			fmt.Println("2号 exit..")
+		}()
 
-  //2号
-  go func ()  {
+		var n = 1
+		for {
 
-    fmt.Println("2号...")
+			<-Limiter
+			if n < 5 {
+				request <- n
+				n++
+			} else {
+				response <- 6
+				break
+			}
 
-    defer func ()  {
-      fmt.Println("2号 exit..")
-    }()
+		}
 
-    var n=1
-  for{
+	}()
 
-    <-Limiter
-    if  n< 5 {
-      request<-n
-      n++
-    }else{
-      response<-6
-      break
-    }
+	//3号
+	go func() {
 
-  }
+		fmt.Println("3号...")
 
-  }()
+		defer func() {
+			fmt.Println("3号 exit...")
+		}()
 
-  //3号
-  go func ()  {
+		for {
 
-    fmt.Println("3号...")
+			fmt.Println("select for...")
+			select {
 
-    defer func ()  {
-      fmt.Println("3号 exit...")
-    }()
+			case <-request:
+				fmt.Println("case request..")
+			case <-response:
+				fmt.Println("case response..")
+				goto Top
+			}
 
-    for{
+		}
+	Top:
+	}()
 
-      select{
+	defer func() {
+		fmt.Println("Main exit")
+	}()
 
-      case <-request:
-        fmt.Println("case request..")
-      case <-response:
-        fmt.Println("case response..")
-          goto Top
-      }
-
-    }
-Top:
-
-  }()
-
-  defer func ()  {
-    fmt.Println("Main exit");
-  }()
-
-time.Sleep(30*time.Second)
+	time.Sleep(30 * time.Second)
 
 }

@@ -1,6 +1,0 @@
-package Mediator
-
-import (
-
-  
-)

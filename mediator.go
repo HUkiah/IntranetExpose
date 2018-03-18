@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-var userport *string = flag.String("userport", "3002", "user访问地址端口")
-var mediatorport *string = flag.String("mediatorport", "20012", "与client通讯端口")
+var cport *string = flag.String("cport", "3002", "user访问地址端口")
+var mport *string = flag.String("mport", "20012", "与client通讯端口")
 
 //与server相关的conn
 type mediator struct {
@@ -147,8 +147,8 @@ func main() {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
-	userPort, _ := strconv.Atoi(*userport)
-	mediatorPort, _ := strconv.Atoi(*mediatorport)
+	userPort, _ := strconv.Atoi(*cport)
+	mediatorPort, _ := strconv.Atoi(*mport)
 	if !(userPort >= 0 && userPort < 65536) {
 		fmt.Println("端口设置错误")
 		os.Exit(1)
@@ -159,9 +159,9 @@ func main() {
 	}
 
 	//监听端口
-	m, err := net.Listen("tcp", ":"+*mediatorport)
+	m, err := net.Listen("tcp", ":"+*mport)
 	log(err)
-	u, err := net.Listen("tcp", ":"+*userport)
+	u, err := net.Listen("tcp", ":"+*cport)
 	log(err)
 	//第一条tcp关闭或者与浏览器建立tcp都要返回重新监听
 TOP:
@@ -179,8 +179,8 @@ TOP:
 	er := make(chan bool, 1)
 	writ := make(chan bool)
 	mediator := &mediator{Mconn, er, heart, false, writ, recv, send}
-	go mediator.read()
-	go mediator.write()
+	go mediator.Read()
+	go mediator.Write()
 
 	//这里可能需要处理心跳
 	for {
@@ -196,8 +196,8 @@ TOP:
 			er = make(chan bool, 1)
 			writ = make(chan bool)
 			user := &user{userconnn, er, writ, recv, send}
-			go user.read()
-			go user.write()
+			go user.Read()
+			go user.Write()
 			//当两个socket都创立后进入handle处理
 			go handle(mediator, user)
 			goto TOP
@@ -247,7 +247,7 @@ func logClose(err error, conn net.Conn) {
 //两个socket衔接相关处理
 func handle(mediator *mediator, user *user) {
 	for {
-		var serverrecv = make([]byte, 10240)
+		var mediatorrecv = make([]byte, 10240)
 		var userrecv = make([]byte, 10240)
 		select {
 
@@ -272,54 +272,53 @@ func handle(mediator *mediator, user *user) {
 	}
 }
 
-//长连接
-func handleConnection(conn net.Conn, timeout int) {
-
-	buffer := make([]byte, 2048)
-
-	for {
-
-		n, err := conn.Read(buffer)
-
-		if err != nil {
-			logErr(conn.RemoteAddr().String(), "Connection Error:", err)
-			return
-		}
-
-		Data := (buffer[:n])
-
-		msg := make(chan byte, 0)
-		postData := make(chan byte, 0)
-
-		//心跳检测
-		go HeartBeating(conn, msg, timeout)
-
-		//检测每次Client是否有数据传来
-		go GravelChannel(Data, msg)
-
-		//记录日志
-
-	}
-}
-
-//根据数据监控，判断是否在设定的时间内发来信息
-func HeartBeating(conn net.Conn, msg chan byte, timeout int) {
-
-	select {
-	case <-msg:
-		//记录日志
-		conn.SetDeadline(time.Duration(timeout) * time.Second)
-		break
-	case <-time.After(time.Second * 5):
-		//记录日志
-		conn.Close()
-	}
-}
-
-//数据监控
-func GravelChannel(n []byte, msg chan byte) {
-	for _, v := range n {
-		msg <- n
-	}
-	close(msg)
-}
+// //长连接
+// func handleConnection(conn net.Conn, timeout int) {
+//
+// 	buffer := make([]byte, 2048)
+//
+// 	for {
+//
+// 		n, err := conn.Read(buffer)
+//
+// 		if err != nil {
+// 			return
+// 		}
+//
+// 		Data := (buffer[:n])
+//
+// 		msg := make(chan byte, 0)
+// 		postData := make(chan byte, 0)
+//
+// 		//心跳检测
+// 		go HeartBeating(conn, msg, timeout)
+//
+// 		//检测每次Client是否有数据传来
+// 		go GravelChannel(Data, msg)
+//
+// 		//记录日志
+//
+// 	}
+// }
+//
+// //根据数据监控，判断是否在设定的时间内发来信息
+// func HeartBeating(conn net.Conn, msg chan byte, timeout int) {
+//
+// 	select {
+// 	case <-msg:
+// 		//记录日志
+// 		conn.SetDeadline(time.Duration(timeout) * time.Second)
+// 		break
+// 	case <-time.After(time.Second * 5):
+// 		//记录日志
+// 		conn.Close()
+// 	}
+// }
+//
+// //数据监控
+// func GravelChannel(n []byte, msg chan byte) {
+// 	for _, v := range n {
+// 		msg <- n
+// 	}
+// 	close(msg)
+// }

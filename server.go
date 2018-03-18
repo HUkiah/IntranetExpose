@@ -13,8 +13,8 @@ import (
 )
 
 var host *string = flag.String("host", "127.0.0.1", "请输入转发服务器ip")
-var mediatorport *string = flag.String("mediatorport", "20012", "转发端口")
-var serviceport *string = flag.String("serviceport", "80", "服务端口")
+var mport *string = flag.String("mport", "20012", "转发端口")
+var sport *string = flag.String("sport", "80", "服务端口")
 
 //与service相关的conn
 type services struct {
@@ -46,18 +46,19 @@ func (self services) read() {
 //把数据发送给service
 func (self services) write() {
 
+	var send []byte = make([]byte, 10240)
+
 	for {
-		var send []byte = make([]byte, 10240)
 		select {
+
 		case send = <-self.send:
 			self.conn.Write(send)
 		case <-self.writ:
-			//fmt.Println("写入browser进程关闭")
-			break
-
+			goto EXIT
 		}
-
 	}
+
+EXIT:
 }
 
 //与mediator相关的conn
@@ -130,8 +131,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	servicePort, _ := strconv.Atoi(*serviceport)
-	mediatorPort, _ := strconv.Atoi(*mediatorport)
+	servicePort, _ := strconv.Atoi(*sport)
+	mediatorPort, _ := strconv.Atoi(*mport)
 	if !(servicePort >= 0 && servicePort < 65536) {
 		fmt.Println("端口设置错误")
 		os.Exit(1)
@@ -140,7 +141,7 @@ func main() {
 		fmt.Println("端口设置错误")
 		os.Exit(1)
 	}
-	targetHost := net.JoinHostPort(*host, *mediatorport)
+	targetHost := net.JoinHostPort(*host, *mport)
 	for {
 		//链接端口
 		Mconn := dail(targetHost)
@@ -159,6 +160,21 @@ func main() {
 
 }
 
+//显示错误并退出
+func logExit(err error) {
+	if err != nil {
+		fmt.Printf("出现错误，退出线程： %v\n", err)
+		runtime.Goexit()
+	}
+}
+
+//链接端口
+func dail(hostport string) net.Conn {
+	conn, err := net.Dial("tcp", hostport)
+	logExit(err)
+	return conn
+}
+
 //两个socket衔接相关处理
 func handle(mediator *mediator, next chan bool) {
 	var mediatorrecv = make([]byte, 10240)
@@ -170,7 +186,7 @@ func handle(mediator *mediator, next chan bool) {
 	//fmt.Println("开始新的tcp链接，发来的消息是：", string(serverrecv))
 	var service *services
 	//server发来数据，链接本地80端口
-	serviceconn := dail("127.0.0.1:" + *serviceport)
+	serviceconn := dail("127.0.0.1:" + *sport)
 	recv := make(chan []byte)
 	send := make(chan []byte)
 	er := make(chan bool, 1)
@@ -204,34 +220,4 @@ func handle(mediator *mediator, next chan bool) {
 			runtime.Goexit()
 		}
 	}
-}
-
-//显示错误
-func log(err error) {
-	if err != nil {
-		fmt.Printf("出现错误： %v\n", err)
-	}
-}
-
-//显示错误并退出
-func logExit(err error) {
-	if err != nil {
-		fmt.Printf("出现错误，退出线程： %v\n", err)
-		runtime.Goexit()
-	}
-}
-
-//显示错误并关闭链接，退出线程
-func logClose(err error, conn net.Conn) {
-	if err != nil {
-		//fmt.Println("对方已关闭", err)
-		runtime.Goexit()
-	}
-}
-
-//链接端口
-func dail(hostport string) net.Conn {
-	conn, err := net.Dial("tcp", hostport)
-	logExit(err)
-	return conn
 }
