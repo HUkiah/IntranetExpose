@@ -1,35 +1,40 @@
 package MediatorService
 
 import (
-	"fmt"
+	"log"
 	"net"
-	"runtime"
-	"time"
+	"strings"
 )
 
 type Client struct {
-	Cconn    net.Conn
-	Error    chan bool
-	WritDead chan bool
-	Recv     chan []byte
-	Send     chan []byte
+	Cconn  net.Conn
+	IsDead chan bool
+	Error  chan bool
+	Recv   chan []byte
+	Send   chan []byte
 }
 
-//这里Read接受Client的数据
+func Log(v ...interface{}) {
+	log.Println(v...)
+}
+
+//这里接收Client的数据
 func (self *Client) Read() {
 
+	data := make([]byte, 10240)
+
 	for {
-		self.Cconn.SetReadDeadline(time.Now().Add(time.Second * 30))
-		data := make([]byte, 10240)
 		n, err := self.Cconn.Read(data)
 
 		if err != nil {
-			fmt.Println("Read Client Data display Error...")
-			fmt.Println("Error:", err.Error())
-			self.Error <- true
-			break
+			Log(self.Cconn.RemoteAddr().String(), " connection error: ", err)
+			if strings.Contains(err.Error(), "EOF") {
+				self.Error <- true
+			}
+			return
 		}
-
+		//因为读取Internet连接的状态，所以不能讲Read goroutine关闭
+		//internet的链接，一般是短连接，假如Hacker
 		self.Recv <- data[:n]
 	}
 
@@ -41,28 +46,28 @@ func (self *Client) Write() {
 	data := make([]byte, 10240)
 
 	for {
+
 		select {
-
 		case data = <-self.Send:
+			Log(self.Cconn.RemoteAddr().String(), "Send: \n", string(data))
 			self.Cconn.Write(data)
-		case <-self.WritDead:
-			fmt.Println("self.writDead...")
-			goto EXIT
-		}
-	}
 
-EXIT:
+		}
+
+	}
 }
 
 //在另一个协程中监听端口函数
-func CconnAccept(con net.Listener, Cconn chan net.Conn) {
-	fmt.Println("Wait Client Connect ..")
+func CAccept(con net.Listener, Cconn chan net.Conn) {
+
+	Log("Wait Client Connect ..")
 	CorU, err := con.Accept()
 	if err != nil {
-		fmt.Println("Client Accept Error!")
-		//forced out of goroutine
-		runtime.Goexit()
+		Log("Client Accept Error!")
+		//out of goroutine
+		return
 	}
-	fmt.Println("Client connect Success!")
+	Log("Client connect Success..")
 	Cconn <- CorU
+
 }
