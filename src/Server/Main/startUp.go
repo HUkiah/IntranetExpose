@@ -1,6 +1,7 @@
 package main
 
 import (
+	"Mediator/MediatorService"
 	"Server/ServiceProvider"
 	"flag"
 	"fmt"
@@ -36,68 +37,65 @@ func main() {
 		fmt.Println("IP address Format Error")
 	}
 
-TOP:
+MINIT:
 	//Init Mediator Service
 	Mconn, err := net.Dial("tcp", net.JoinHostPort(*host, *mport))
 	if err != nil {
 		fmt.Sprintf("net.Dial %s Error!", *host+*mport)
 	}
 
-	mediator := &ServiceProvider.Mediator{Mconn, make(chan bool, 1), make(chan bool), make(chan []byte, 0), make(chan []byte, 0)}
+	mediator := &ServiceProvider.Mediator{Mconn, make(chan bool), make(chan bool), make(chan []byte), make(chan []byte)}
 
 	go mediator.Read()
 	go mediator.Write()
 
-	next := make(chan bool)
-	go handler(mediator, next)
-	<-next
-	goto TOP
+	//	goto TOP
 
-}
-
-func handler(mediator *ServiceProvider.Mediator, next chan bool) {
-
-	servicerecv := make([]byte, 10240)
-	mediatorrecv := make([]byte, 10240)
-
+SINIT:
 	//Init Local services
 	Sconn, error := net.Dial("tcp", net.JoinHostPort("localhost", *sport))
 	if error != nil {
 		fmt.Sprintf("net.Dial %s Error!", *host+*mport)
 	}
 
-	service := &ServiceProvider.Service{Sconn, make(chan bool, 1), make(chan bool), make(chan []byte, 0), make(chan []byte, 0)}
+	service := &ServiceProvider.Service{Sconn, make(chan bool), make(chan bool), make(chan []byte), make(chan []byte)}
 
 	go service.Read()
 	go service.Write()
 
-	//mediator msg
-	mediatorrecv = <-mediator.Recv
-	service.Send <- mediatorrecv
-	next <- true
+	go handler(mediator, service)
 
-TOP:
+	//TOP:
+	for {
+		select {
+		case <-mediator.Error:
+			mediator.Mconn.Close()
+			MediatorService.Log("Mconn close")
+			goto MINIT
+		case <-service.Error:
+			service.Sconn.Close()
+			MediatorService.Log("Sconn close")
+			goto SINIT
 
-	select {
-
-	case mediatorrecv = <-mediator.Recv:
-		service.Send <- mediatorrecv
-		fmt.Println("Remote Mediator->Server")
-	case servicerecv = <-service.Recv:
-		mediator.Send <- servicerecv
-		fmt.Println("Server->Mediator")
-
-	case <-mediator.Error:
-		mediator.Mconn.Close()
-		service.Sconn.Close()
-		runtime.Goexit()
-	case <-service.Error:
-		mediator.Mconn.Close()
-		service.Sconn.Close()
-		runtime.Goexit()
-
+		}
 	}
 
-	goto TOP
+}
+
+func handler(mediator *ServiceProvider.Mediator, service *ServiceProvider.Service) {
+
+	servicerecv := make([]byte, 10240)
+	mediatorrecv := make([]byte, 10240)
+
+	for {
+		select {
+
+		case mediatorrecv = <-mediator.Recv:
+			service.Send <- mediatorrecv
+		case servicerecv = <-service.Recv:
+			mediator.Send <- servicerecv
+
+		}
+	}
 
 }

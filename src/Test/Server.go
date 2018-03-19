@@ -31,7 +31,7 @@ func (self *Server) Read() {
 TOP:
 	try := 0
 
-	self.Sconn.SetReadDeadline(time.Now().Add(time.Second * 10))
+	self.Sconn.SetReadDeadline(time.Now().Add(time.Second * 420))
 
 	for {
 
@@ -53,11 +53,11 @@ TOP:
 					//try 3 次后，发送3心跳包
 					try++
 					self.Send <- []byte("hh")
-					self.Sconn.SetReadDeadline(time.Now().Add(2 * time.Second))
+					self.Sconn.SetReadDeadline(time.Now().Add(20 * time.Second))
 					continue
 				}
 				try++
-				self.Sconn.SetReadDeadline(time.Now().Add(1 * time.Second))
+				self.Sconn.SetReadDeadline(time.Now().Add(20 * time.Second))
 				continue
 			}
 

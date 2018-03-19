@@ -40,62 +40,62 @@ func main() {
 		fmt.Printf("Listen Client Port Error: %v\n", err)
 	}
 
-INIT:
-	//开启协程监听Client链接
-	Cconn := make(chan net.Conn)
-	go MediatorService.CconnAccept(c, Cconn)
-
+MINIT:
 	//等待初始化ServiceProvider
 	Mconn := MediatorService.MediatorAccept(m)
 
-	mediator := &MediatorService.Mediator{Mconn, make(chan bool, 0), make(chan bool, 1), make(chan bool), make(chan []byte, 0), make(chan []byte, 0)}
+	mediator := &MediatorService.Mediator{Mconn, make(chan bool), make(chan bool), make(chan []byte), make(chan []byte)}
 
 	go mediator.Read()
 	go mediator.Write()
 
+CINIT:
+	//开启协程监听Client链接
+	Cconn := make(chan net.Conn)
+	go MediatorService.CconnAccept(c, Cconn)
+
+	var client *MediatorService.Client
+	var clientStatus = make(chan bool)
+
 	for {
 		select {
-
-		case <-mediator.Heart:
-			goto INIT
+		case <-mediator.Error:
+			mediator.Mconn.Close()
+			MediatorService.Log("Mconn close")
+			goto MINIT
 			//等待client connect
 		case Clientconn := <-Cconn:
-			client := &MediatorService.Client{Clientconn, make(chan bool, 1), make(chan bool), make(chan []byte, 0), make(chan []byte, 0)}
+			client = &MediatorService.Client{Clientconn, make(chan bool), make(chan bool), make(chan []byte), make(chan []byte)}
 			go client.Read()
 			go client.Write()
-			go handler(mediator, client)
+			go handler(mediator, client, clientStatus)
+		case <-clientStatus:
+			goto CINIT
 		}
 	}
 
 }
 
-func handler(mediator *MediatorService.Mediator, client *MediatorService.Client) {
+func handler(mediator *MediatorService.Mediator, client *MediatorService.Client, clientStatus chan bool) {
 
-	fmt.Println("Handler...")
-	clientrecv := make([]byte, 2048)
-	mediatorrecv := make([]byte, 2048)
+	MediatorService.Log("Handler...")
+	clientrecv := make([]byte, 10240)
+	mediatorrecv := make([]byte, 10240)
 
-TOP:
+	for {
+		select {
 
-	select {
+		case mediatorrecv = <-mediator.Recv:
+			client.Send <- mediatorrecv
 
-	case mediatorrecv = <-mediator.Recv:
-		client.Send <- mediatorrecv
+		case clientrecv = <-client.Recv:
+			mediator.Send <- clientrecv
 
-	case clientrecv = <-client.Recv:
-		mediator.Send <- clientrecv
-
-	case <-mediator.Error:
-		mediator.Mconn.Close()
-		client.Cconn.Close()
-		runtime.Goexit()
-	case <-client.Error:
-		mediator.Mconn.Close()
-		client.Cconn.Close()
-		runtime.Goexit()
-
+		case <-client.Error:
+			client.Cconn.Close()
+			MediatorService.Log("Cconn close")
+			clientStatus <- true
+		}
 	}
-
-	goto TOP
 
 }

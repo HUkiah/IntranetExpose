@@ -7,7 +7,7 @@ import (
 )
 
 type Service struct {
-	Cconn  net.Conn
+	Sconn  net.Conn
 	IsDead chan bool
 	Error  chan bool
 	Recv   chan []byte
@@ -21,13 +21,13 @@ func Log(v ...interface{}) {
 //这里Read接受Local Service的数据
 func (self *Service) Read() {
 
-	data := make([]byte, 2048)
+	data := make([]byte, 10240)
 
 	for {
 		n, err := self.Sconn.Read(data)
 
 		if err != nil {
-			Log(self.Cconn.RemoteAddr().String(), " connection error: ", err)
+			Log(self.Sconn.RemoteAddr().String(), " connection error: ", err)
 
 			if strings.Contains(err.Error(), "EOF") {
 				self.IsDead <- true
@@ -50,7 +50,7 @@ func (self *Service) Write() {
 
 		select {
 		case data = <-self.Send:
-			self.Cconn.Write(data)
+			self.Sconn.Write(data)
 		case <-self.IsDead:
 			//Do Someting
 			self.Error <- true

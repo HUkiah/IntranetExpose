@@ -31,7 +31,7 @@ func (self *Client) Read() {
 TOP:
 	try := 0
 
-	self.Cconn.SetReadDeadline(time.Now().Add(time.Second * 6))
+	self.Cconn.SetReadDeadline(time.Now().Add(time.Second * 300))
 
 	for {
 		n, err := self.Cconn.Read(data)
@@ -55,11 +55,11 @@ TOP:
 					//try 3 次后，发送3心跳包
 					try++
 					self.Send <- []byte("xx")
-					self.Cconn.SetReadDeadline(time.Now().Add(2 * time.Second))
+					self.Cconn.SetReadDeadline(time.Now().Add(20 * time.Second))
 					continue
 				}
 				try++
-				self.Cconn.SetReadDeadline(time.Now().Add(1 * time.Second))
+				self.Cconn.SetReadDeadline(time.Now().Add(20 * time.Second))
 				continue
 			}
 

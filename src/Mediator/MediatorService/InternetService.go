@@ -1,7 +1,6 @@
 package MediatorService
 
 import (
-	"log"
 	"net"
 	"strings"
 )
@@ -12,10 +11,6 @@ type Client struct {
 	Error  chan bool
 	Recv   chan []byte
 	Send   chan []byte
-}
-
-func Log(v ...interface{}) {
-	log.Println(v...)
 }
 
 //这里接收Client的数据
@@ -49,7 +44,7 @@ func (self *Client) Write() {
 
 		select {
 		case data = <-self.Send:
-			Log(self.Cconn.RemoteAddr().String(), "Send: \n", string(data))
+			//Log(self.Cconn.RemoteAddr().String(), "Send: \n", string(data))
 			self.Cconn.Write(data)
 
 		}
@@ -58,7 +53,7 @@ func (self *Client) Write() {
 }
 
 //在另一个协程中监听端口函数
-func CAccept(con net.Listener, Cconn chan net.Conn) {
+func CconnAccept(con net.Listener, Cconn chan net.Conn) {
 
 	Log("Wait Client Connect ..")
 	CorU, err := con.Accept()

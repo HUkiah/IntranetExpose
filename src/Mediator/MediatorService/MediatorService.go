@@ -1,19 +1,23 @@
 package MediatorService
 
 import (
-	"fmt"
+	"log"
 	"net"
 	"runtime"
+	"strings"
 	"time"
 )
 
 type Mediator struct {
-	Mconn    net.Conn
-	Heart    chan bool
-	Error    chan bool
-	WritDead chan bool
-	Recv     chan []byte
-	Send     chan []byte
+	Mconn  net.Conn
+	IsDead chan bool
+	Error  chan bool
+	Recv   chan []byte
+	Send   chan []byte
+}
+
+func Log(v ...interface{}) {
+	log.Println(v...)
 }
 
 //because mediator attribute ,so Read data is not processed. write same
@@ -25,123 +29,83 @@ func (self *Mediator) Read() {
 TOP:
 	try := 0
 
-	self.Mconn.SetReadDeadline(time.Now().Add(time.Second * 30))
+	self.Mconn.SetReadDeadline(time.Now().Add(time.Second * 420))
 
-RETRY:
-	n, err := self.Mconn.Read(data)
+	for {
+		n, err := self.Mconn.Read(data)
 
-	//已经Temporary Error处理 timeout错误
-	if err != nil {
-		e, ok := err.(net.Error)
-		if !ok || !e.Temporary() || try >= 3 {
-			//尝试3次后，标记为错误
-			self.Error <- true
-			self.Heart <- true
-			goto EXIT
+		//已经Temporary Error处理 timeout错误
+		if err != nil {
+			Log(self.Mconn.RemoteAddr().String(), " connection error: ", err)
+
+			//不是一个网络错误，临时错误，已经试了3次
+			if strings.Contains(err.Error(), "timeout") && try <= 5 {
+				//取消超时
+				self.Mconn.SetReadDeadline(time.Time{})
+				//如果因为网络问题，延长等待30s。没有导致没有收到，则发送3次心跳
+				if try >= 3 {
+					//try 3 次后，发送3心跳包
+					try++
+					self.Send <- []byte("hh")
+					self.Mconn.SetReadDeadline(time.Now().Add(20 * time.Second))
+					continue
+				}
+				try++
+				self.Mconn.SetReadDeadline(time.Now().Add(20 * time.Second))
+				continue
+			}
+
+			self.IsDead <- true
+			return
 		}
-		try++
-		self.Mconn.SetReadDeadline(time.Now().Add(0 * time.Second))
-		goto RETRY
+
+		//Log(self.Mconn.RemoteAddr().String(), "Receive :\n", string(data[:n]))
+
+		//心跳包，原样返回
+		if data[0] == 'h' && data[1] == 'h' {
+
+			goto TOP
+		} else if data[0] == 'x' && data[1] == 'x' {
+
+			self.Send <- data[:n]
+			goto TOP
+		} else {
+			self.Recv <- data[:n]
+		}
+
 	}
 
-	//收到心跳包
-	if data[0] == 'h' && data[1] == 'h' {
-
-		self.Mconn.Write([]byte("hh"))
-		goto TOP
-	}
-
-	self.Recv <- data[:n]
-
-	//每次接收到数据，重置timeout计时
-	goto TOP
-
-EXIT:
 }
 
 func (self *Mediator) Write() {
 
-	var data []byte = make([]byte, 10240)
+	data := make([]byte, 10240)
 
 	for {
 
 		select {
-
 		case data = <-self.Send:
+			//Log(self.Mconn.RemoteAddr().String(), "Send: \n", string(data))
 			self.Mconn.Write(data)
-		case <-self.WritDead:
-			//Service shutdown Connect
-			goto EXIT
+		case <-self.IsDead:
+			//Do Something
+			self.Error <- true
 
 		}
 
 	}
-
-EXIT:
 }
 
 //mediator listen function
 func MediatorAccept(conn net.Listener) net.Conn {
 
-	fmt.Println("Wait ServiceProvider Connect ..")
+	Log("Wait ServiceProvider Connect ..")
 	CorU, err := conn.Accept()
 	if err != nil {
-		fmt.Println("Mediator Accept Error!")
+		Log("Mediator Accept Error!")
 		//forced out of goroutine
 		runtime.Goexit()
 	}
-	fmt.Println("ServiceProvider connect Success!")
+	Log("ServiceProvider connect Success!")
 	return CorU
 }
-
-// //长连接
-// func handleConnection(conn net.Conn, timeout int) {
-//
-// 	buffer := make([]byte, 2048)
-//
-// 	for {
-//
-// 		n, err := conn.Read(buffer)
-//
-// 		if err != nil {
-// 			//logErr(conn.RemoteAddr().String(), "Connection Error:", err)
-// 			return
-// 		}
-//
-// 		Data := (buffer[:n])
-//
-// 		msg := make(chan byte, 0)
-// 		postData := make(chan byte, 0)
-//
-// 		//心跳检测
-// 		go HeartBeating(conn, msg, timeout)
-//
-// 		//检测每次Client是否有数据传来
-// 		go GravelChannel(Data, msg)
-//
-// 		//记录日志
-//
-// 	}
-// }
-//
-// //根据数据监控，判断是否在设定的时间内发来信息
-// func HeartBeating(conn net.Conn, msg chan byte, timeout int) {
-//
-// 	select {
-// 	case <-msg:
-// 		//记录日志
-// 		conn.SetDeadline(time.Now().Add(time.Duration(timeout) * time.Second))
-// 		break
-// 	case <-time.After(time.Second * 5):
-// 		//记录日志
-// 		conn.Close()
-// 	}
-// }
-//
-// //数据监控
-// func GravelChannel(n []byte, msg chan byte) {
-// 	for _, v := range n {
-// 		msg <- v
-// 	}
-// 	close(msg)
-// }
